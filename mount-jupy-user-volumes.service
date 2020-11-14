@@ -1,0 +1,16 @@
+[Unit]
+Before=multi-user.target
+After=jupyterhub.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+Restart=no
+TimeoutSec=10
+GuessMainPID=no
+RemainAfterExit=yes
+ExecStart=/bin/bash /etc/systemd/mount_dd_and_volumes
+ExecStop=/bin/bash /etc/systemd/umount_dd_and_volumes
+
+[Install]
+WantedBy=multi-user.target
