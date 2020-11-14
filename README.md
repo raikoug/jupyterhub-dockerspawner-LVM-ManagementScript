@@ -134,10 +134,18 @@ The file: `/etc/systemd/umount_dd_and_volumes`
 # this file should be aligned with umount of the user volumes
 
 ```
+Startup it!
+```
+chmod 744 /etc/systemd/mount_dd_and_volumes
+chmod 744 /etc/systemd/umount_dd_and_volumes
+chmod 664 /etc/systemd/system/mount-jupy-user-volumes.service
+systemctl daemon-reload
+systemctl enable mount-jupy-user-volumes.service
+```
 
 We are ready to JupyterHub and DockerSpawner conf
 
-####2 - JupyterHub + DockerHub
+####2.a - JupyterHub + DockerHub
 There really few commands here:
 ```
 # i expect python3.8 to be my alt install!
@@ -300,11 +308,187 @@ else
     echo "mount $USER_VOLUME $USER_DIRECTORY" >> /etc/systemd/mount_dd_and_volumes
     echo "chown -R USER_NOT_NAME:users $USER_DIRECTORY" >> /etc/systemd/mount_dd_and_volumes
     echo "" >> /etc/systemd/mount_dd_and_volumes
-        
+    
+    # NOT TESTED YET
+    echo "umount $USER_DIRECTORY" >> /etc/systemd/umount_dd_and_volumes
+    echo "" >> /etc/systemd/umount_dd_and_volumes
 
 fi
 
 exit 0
 ```
 I'm sorry, and still, don't know how "USER_NOT_NAME" is chosen... I made this procedure in 2 different system and in the first one all volumes needed to be chowned to "raikoug" to be used by dockers, and the next one with another username "userpy" i had previously there.. I never used them in the procedures, I just use root (i'm a bad guy..)
+The procedure I use to discover this is a first launch with a random username.
+chmod 777 the user volume
+Run jupyterhub for the user, and create a file.
+I then discover his attributes. At least this is a one time procedure, becouse from that moment on you know that "user:group" will be used for all the users!
+With this you are ready to test and use the above workaround!
+In userlist there is a user (in my example raikoug) with admin permission
+- Start jupyer hub:
+	`/opt/jupyterhub/bin/jupyterhub -f /opt/jupyterhub/etc/jupyterhub/jupyterhub_config.py`
+- Go to http://ip:8000
+- Login
+- An error will occur, we already know why ;)
+- scripts should have create the LVM raikoug and mounted it on `/opt/jupyterhub/user_volume/raikoug`
+```
+chmod -R 777 /opt/jupyterhub/user_volume/raikoug
+```
+- retry login to jupyterhub (we needed first login with error to run the user volumes script)
+- it Works!
+- Create a file save, stop you server, logout, kill jupyterhub (ctrl+c under the process you started before)
+- Go check in /opt/jupyterhub/user_volume/raikoug with
+```
+ls -la /opt/jupyterhub/user_volume/raikoug/
+```
+- Get the username it belongs, and chmod back it to 655
+- Change the `bootstrap_user_dir.sh` script replacing USER_NOT_NAME
+
+####2.b - Startup Services
+Yes, another startup service
+File: `/opt/jupyterhub/etc/systemd/jupyterhub.service` (create folder beforhand)
+```
+[Unit]
+Description=JupyterHub
+After=syslog.target network.target
+
+[Service]
+User=root
+Environment="PATH=/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/jupyterhub/bin"
+ExecStart=/opt/jupyterhub/bin/jupyterhub -f /opt/jupyterhub/etc/jupyterhub/jupyterhub_config.py
+
+[Install]
+WantedBy=multi-user.target
+```
+Then:
+```
+sudo ln -s /opt/jupyterhub/etc/systemd/jupyterhub.service /etc/systemd/system/jupyterhub.service
+systemctl daemon-reload
+systemctl enable jupyterhub.service
+systemctl start jupyterhub.service
+systemctl status jupyterhub.service
+```
+
+Now you system is ready, we need some aoutomation to create new user.
+
+#### User Manaement
+To create a new user the steps are:
+- adduser to system
+- add user to jupyterhub
+- communicate username-password to students.
+
+We will a python script to manage all these things, and will use email to notify students.
+The script will take a CSV as argument.
+You need to log in jupyter hub as Admin and take the token.
+I won't explain you should modify my script to not have token hard coded into it, but you shold!
+
+the script!
+```python
+import requests
+import argparse
+import os
+import sys
+from passgen import passgen
+import crypt
+from myUtils import Mailer # you will find this soon in the project
+from jinja2 import Environment, FileSystemLoader
+from random import shuffle
+import pwd
+
+parser = argparse.ArgumentParser(description='Gestione utenti per jupyterhub')
+
+parser.add_argument('-a', '--add',
+                     metavar='add',
+                     type=str,
+                     help='Path to csv file')
+
+args = parser.parse_args()
+
+input_path = args.add
+
+if input_path:
+    if not os.path.exists(input_path):
+        print(f'File doesn't exists: {input_path}')
+        sys.exit()
+    
+    lista = open(input_path, 'r').read()
+    # i'm barbaric in my csv... not quotes.. i Know.. not the best..
+    if "'" in lista or '"' in lista:
+        print(f"CSV file is unsupported, check the template:\n")
+	# I have a template to tell how I like them...
+        print(open('/opt/jupyterhub/etc/jupyterhub/csv.template', 'r').read())
+        sys.exit(1)
+
+    lista = lista.split("\n")[1::]
+    # I accept that each user could have more than 1 male seprated with ";"
+    lista = [{'studente':el.split(',')[0], 'mail':el.split(',')[1]} for el in lista if el]
+    mails = []
+    allusers = []
+    api_user_list = []
+    
+    for el in lista:
+        userlist = [u.pw_name for u in pwd.getpwall()]
+	
+	# This could be seen as crazy... I take only alpha char of students
+	# Then i shuffle them and create the username...
+	# had not a better idea for duplicate "name surnames"
+        protouser = el['studente']
+        protouser = [b.lower() for b in protouser if b.isalpha()]
+        while True:
+            shuffle(protouser)
+            username = "".join(protouser)
+	    # check if username generated is not duplicated
+            if username not in userlist:
+                break
+	
+        print(f"Utente risulatante {username}")
+	
+        # Unix user creation
+        password = passgen(50)
+	# too long?
+        encPass = crypt.crypt(password,"22")
+	# encryption for useradd command on unix
+        os.system("useradd -p "+encPass+f" {username}")
+
+        ## user will be added as last thing to jupyterhub with a single api
+        ## now MAILS
+        file_loader = FileSystemLoader('templates')
+        env = Environment(loader=file_loader)
+	
+	# I use a template to create html body of the mail
+        template = env.get_template('base_send_password.html')
+        output = template.render(username = username, password = password)
+
+        mails = el['mail'].split(";")
+        for email in mails:
+            print(f"Creazione ed invio mail a {email}")
+            mail = Mailer(rcpt = email, html = output)
+            mail.mail_send()
+	
+	# DEBUG PURPOSE ONLY, this fill will store username password
+        with open('utenze', 'a') as outfile:
+            outfile.write(f"{username}:{password}\n")
+
+    ## api to add users
+    token = "YOUR_TOKEN"
+    api_url = 'http://127.0.0.1:8000/hub/api'
+    # body with list of users
+    body = {"usernames": api_user_list,
+            "admin": False
+            }
+    r = requests.post(api_url + '/users', headers={'Authorization': f"token {token}"}, json=body)
+    if r.ok:
+        print("DONE!!")
+    else:
+        print("Some error occurred")
+    
+```
+In myUtils there is a mailer class, you can make your own or watch mine (wich I modified from one passed to me by MarcoB!!!)
+
+Noe you can call the script, giving a csv as argument.
+
+### Next Steps
+- Improve overall code
+- Making a install.sh file with some magic
+
+
 
