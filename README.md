@@ -1,24 +1,25 @@
 #  JupyterHub + Dockerspawner 
-This project want to help others who may be searching for something similar to my solution I needed to teach python to my students.
+This project wants to help others who may be searching for something similar to my solution I needed to teach python to my students.
 This guide is based on Debian 10
 
-###First of ALL all the original projects, and thanks to them all:
+### First of ALL the original projects, and thanks to them all:
 - [Jupyter](https://github.com/jupyter "Jupyter")
 - [JupyterHub](https://jupyter.org/hub "JupyterHub")
 - [DockerSpawner](https://github.com/jupyterhub/dockerspawner "DockerSpawner")
 - [jupyterhub-idle-culler](https://github.com/jupyterhub/jupyterhub-idle-culler "AntiIdle")
 
-###What I needed:
+### What I needed:
 - A base jupyterHub, without external authentication.
 - Every Student with his JupyterLab environment
 - Limited resources for each student (RAM, Disk).
 - Easy user management with python script
 
-###Missing:
+### Missing:
 - Documents persistence for student is granted, but not the "pip install"
 - RestApi to manage students (only local script)
 
-### immagine brutta
+### Sorry for my low drawing performances!
+![scheme](https://github.com/raikoug/jupyterhub-dockerspawner-LVM-ManagementScript/blob/main/jhub2.png?raw=true)
 
 
 ## Let's Begin
@@ -28,13 +29,13 @@ This guide is based on Debian 10
 	b. Python
 	c. LVM
 	d. StartupServices
-1. JupyterHub + DockerHub
+1. JupyterHub + DockerSpawner
 	a. Installation
 	b. Startup Services
 1. User Management
 
 
-####1 - Environment Setup
+#### 1 - Environment Setup
 it is better not to reinvent the wheel, and will use [This awesome guide ](https://jupyterhub.readthedocs.io/en/stable/installation-guide-hard.html "This awesome guide ") as base to develop the project further.
 ###### 1.a - Prerequisites
 Some package will be needed beforehand:
@@ -57,7 +58,7 @@ cd Python-3.8.6
 nproc
 # Use it insted of X
 make -j X
-# We will use altinstall, and it's absolutely recommened to not overwrite system default python3!!!!
+# We will use altinstall, and it's absolutely recommended to not overwrite system default python3!!!!
 make altinstall
 ```
 ###### 1.c - LVM
@@ -65,7 +66,7 @@ There 2 cases:
 1. You already use logical volumes
 2. You don't.
 
-I will help follow second hypotesis since most of the times VPS doesn't come with this type of configurations.
+I will help follow second hypothesis since most of the times VPS doesn't come with this type of configurations.
 
 Steps are simple:
 - Create a big zero file
@@ -74,7 +75,7 @@ Steps are simple:
 
 This solution is really efficient with SSD (often used with VPS!)
 ```
-# Note: BS is the lengh and count, the times you make the lenght.
+# Note: BS is the length and count, the times you make the length.
 # 1M 100 will be 100M
 # I will use 4M 2560 --> 10240M -> 10G
 dd if=/dev/zero of=/root/user_dd bs=4M count=2560
@@ -85,15 +86,15 @@ pvcreate $los
 vgcreate user_vg $los
 # DONE
 ```
-We won't create any user volume now, we want it to be managed automatically!
-And here we go with out startup service, in case of restart!
+We won't create any user volume now; we want it to be managed automatically!
+And here we go without startup service, in case of restart!
 
 ###### 1.d - StartupServices
-We need our volumes loaded if the system reboot, we don't want to crate new user volumes, we want to retrive them for user data persistence!
-Teh startup script will be Appended everytime a new user will be created.
+We need our volumes loaded if the system reboot, we don't want to create new user volumes, we want to retrieve them for user data persistence!
+Thh startup script will be Appended every time a new user will be created.
 
 I will user `mount-jupy-user-volumes.service` as my service name.
-I tried to use names I would remeber later, but you can change all of them.
+I tried to use names I would remember later, but you can change all of them.
 The file: `/etc/systemd/system/mount-jupy-user-volumes.service`
 ```
 [Unit]
@@ -113,7 +114,7 @@ ExecStop=/bin/bash /etc/systemd/umount_dd_and_volumes
 [Install]
 WantedBy=multi-user.target
 ```
-As you can see we have 2 scripts: `mount_dd_and_volumes` and `umount_dd_and_volumes`
+As you can see, we have 2 scripts: `mount_dd_and_volumes` and `umount_dd_and_volumes`
 here they are:
 file `/etc/systemd/mount_dd_and_volumes`
 ```
@@ -134,7 +135,7 @@ The file: `/etc/systemd/umount_dd_and_volumes`
 # this file should be aligned with umount of the user volumes
 
 ```
-Startup it!
+Make it starts at boot!
 ```
 chmod 744 /etc/systemd/mount_dd_and_volumes
 chmod 744 /etc/systemd/umount_dd_and_volumes
@@ -143,12 +144,12 @@ systemctl daemon-reload
 systemctl enable mount-jupy-user-volumes.service
 ```
 
-We are ready to JupyterHub and DockerSpawner conf
+We are ready to install JupyterHub and DockerSpawner
 
-####2.a - JupyterHub + DockerHub
-There really few commands here:
+#### 2.a - JupyterHub + DockerSpawner
+There are really few commands here:
 ```
-# i expect python3.8 to be my alt install!
+# I expect python3.8 to be my alt install!
 python3.8 -m venv /opt/jupyterhub/
 /opt/jupyterhub/bin/python3 -m pip install wheel
 /opt/jupyterhub/bin/python3 -m pip install jupyterhub jupyterlab
@@ -162,7 +163,7 @@ python3.8 -m venv /opt/jupyterhub/
 apt install nodejs npm
 npm install -g configurable-http-proxy
 ```
-Don't warry abount node warnings
+Don't warry about node warnings
 
 Now we can set up our folders:
 ```
@@ -317,11 +318,11 @@ fi
 
 exit 0
 ```
-I'm sorry, and still, don't know how "USER_NOT_NAME" is chosen... I made this procedure in 2 different system and in the first one all volumes needed to be chowned to "raikoug" to be used by dockers, and the next one with another username "userpy" i had previously there.. I never used them in the procedures, I just use root (i'm a bad guy..)
+I'm sorry, and still, don't know how "USER_NOT_NAME" is chosen... I made this procedure in 2 different system and in the first one all volumes needed to be chowned to "raikoug" to be used by dockers, and the next one with another username "userpy" I had previously there.. I never used them in the procedures, I just use root (I'm a bad guy..)
 The procedure I use to discover this is a first launch with a random username.
 chmod 777 the user volume
 Run jupyterhub for the user, and create a file.
-I then discover his attributes. At least this is a one time procedure, becouse from that moment on you know that "user:group" will be used for all the users!
+I then discover his attributes. At least this is a one-time procedure, because from that moment on you know that "user:group" will be used for all the users!
 With this you are ready to test and use the above workaround!
 In userlist there is a user (in my example raikoug) with admin permission
 - Start jupyer hub:
@@ -343,9 +344,9 @@ ls -la /opt/jupyterhub/user_volume/raikoug/
 - Get the username it belongs, and chmod back it to 655
 - Change the `bootstrap_user_dir.sh` script replacing USER_NOT_NAME
 
-####2.b - Startup Services
+#### 2.b - Startup Services
 Yes, another startup service
-File: `/opt/jupyterhub/etc/systemd/jupyterhub.service` (create folder beforhand)
+File: `/opt/jupyterhub/etc/systemd/jupyterhub.service` (create folder beforehand)
 ```
 [Unit]
 Description=JupyterHub
@@ -368,9 +369,9 @@ systemctl start jupyterhub.service
 systemctl status jupyterhub.service
 ```
 
-Now you system is ready, we need some aoutomation to create new user.
+Now you system is ready, we need some automation to create new user.
 
-#### User Manaement
+#### User Management
 To create a new user the steps are:
 - adduser to system
 - add user to jupyterhub
@@ -379,7 +380,7 @@ To create a new user the steps are:
 We will a python script to manage all these things, and will use email to notify students.
 The script will take a CSV as argument.
 You need to log in jupyter hub as Admin and take the token.
-I won't explain you should modify my script to not have token hard coded into it, but you shold!
+I won't explain you should modify my script to not have token hard coded into it, but you should!
 
 the script!
 ```python
@@ -419,7 +420,7 @@ if input_path:
         sys.exit(1)
 
     lista = lista.split("\n")[1::]
-    # I accept that each user could have more than 1 male seprated with ";"
+    # I accept that each user could have more than 1 male separated with ";"
     lista = [{'studente':el.split(',')[0], 'mail':el.split(',')[1]} for el in lista if el]
     mails = []
     allusers = []
@@ -482,7 +483,7 @@ if input_path:
         print("Some error occurred")
     
 ```
-In myUtils there is a mailer class, you can make your own or watch mine (wich I modified from one passed to me by MarcoB!!!)
+In myUtils there is a mailer class, you can make your own or watch mine (which I modified from one passed to me by MarcoB!!!)
 
 Noe you can call the script, giving a csv as argument.
 
