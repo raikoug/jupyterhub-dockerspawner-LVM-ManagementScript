@@ -1,0 +1,9 @@
+## initialize loop device user_dd
+losetup -fP /root/user_dd 
+
+## volume research
+pvscan
+vgscan
+lvscan
+
+## User volume mount
